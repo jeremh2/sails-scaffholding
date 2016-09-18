@@ -18,17 +18,32 @@ module.exports = {
    */
   login: function (req, res) {
 
+		if (req.method == 'GET') {
+			return res.view('login');
+		}
 
-		Credential.findOne({user: user.id}).populate('user').exec(function (err, credential) {
+		var identifier = req.params.identifier;
+		var password = req.params.password;
+
+		Credential.findOne({identifier: identifier}).populate('user').exec(function (err, credential) {
 			if (err) return res.negotiate(err);
 
-			req.session.authenticated = true
+			credential.validatePassword(password, function(err, result) {
+				if (err) return res.badRequest(err);
 
-			return res.ok({
-				message: "successfully authenticated",
-				accessToken: credential.accessToken,
-				user: credential.user
+				if (!result) return res.forbidden("Bad password");
+				else {
+					req.session.authenticated = true
+
+					return res.ok({
+						message: "successfully authenticated",
+						accessToken: credential.accessToken,
+						user: credential.user
+					});
+				}
+
 			});
+
 		});
 
   },
@@ -65,41 +80,61 @@ module.exports = {
    */
   register: function (req, res) {
 
-    res.view({
-      errors: req.flash('error')
-    });
-  },
+		if (req.method == 'GET') return res.view('register');
 
+		var data = req.params;
 
-  /**
-   * Disconnect a passport from a user
-   *
-   * @param {Object} req
-   * @param {Object} res
-   */
-  disconnect: function (req, res) {
-    passport.disconnect(req, res);
+		Credential.create({identifier: data.email, password: data.password}).exec(function (err, credential) {
+			if (err) return res.negotiate(err);
+			if (!credential) return res.serverError("Can't create credentials");
+
+			// Here, add the other attribute you want by default in a new User
+			User.create({email: data.email, credential: credential.id}).exec(function (err, user) {
+				if (err || !user) {
+					Credential.destroy(credential.id).exec(function(err, deleted) {
+						err = err || "Can't create User";
+						return res.serverError(err);
+					});
+				}
+
+				req.session.authenticated = true
+
+				return res.created({
+					message: "user successfully created and authenticated",
+					accessToken: credential.accessToken,
+					user: user
+				});
+			});
+		});
   },
 
 
   forgot: function (req, res) {
-    var email = req.body.email;
 
-    var token = uuid.v4(); // generate a random and unique token
+		if (req.method == 'GET') return res.view('forgot');
+
+    var email = req.params.email;
 
     User.findOne({email: email}).exec(function (err, user) {
-      if (err) return res.negociate(err);
+      if (err) return res.negotiate(err);
       if (!user) return res.badRequest({message: "No account with that email address exists.", code: 1});
 
-      var expires = Date.now() + 3600000; // 1 hour
+			var token = uuid.v4(); // generate a random and unique token
+			var expires = Date.now() + 3600000; // 1 hour
 
-      Passport.update({user: user.id, protocol: 'local'}, {resetPasswordToken: token, resetPasswordExpires: expires}).exec(function (err, updatedPassports) {
+      Credential.update({user: user.id}, {resetPasswordToken: token, resetPasswordExpires: expires}).exec(function (err, updatedPassports) {
         if (err) return res.negotiate(err);
         if (!updatedPassports[0]) return res.badRequest({message: "This account is authenticated by other means than password.", code: 2});
 
         // send an email to the user with a link to the reset password page
-        userEmails.lostPassword(user, token);
-        return res.ok({message: 'An email has been sent to ' + user.email + ' with further instructions.', email: user.email});
+				var emailOptions = {
+					to: email,
+					subject: 'Reset password',
+					html: "<a href='" + sails.config.appUrl + '/auth/reset/' + token, + "'>Click here to reset your password</a>"
+				}
+				email.send(emailOptions);
+
+        return res.ok({message: 'An email has been sent to ' + user.email + ' with further instructions.'});
 
       });
     });
@@ -107,34 +142,33 @@ module.exports = {
 
   reset: function (req, res) {
 
-    Passport.findOne({resetPasswordToken: req.params.token, resetPasswordExpires: { $gt: Date.now() }}).exec(function (err, passport) {
+    Credential.findOne({resetPasswordToken: req.params.token, resetPasswordExpires: { $gt: Date.now() }}).exec(function (err, credential) {
       if (err) return res.negotiate(err);
-      if (!passport) return res.badRequest('Password reset token is invalid or has expired.');
+      if (!credential) return res.badRequest('Password reset token is invalid or has expired.');
 
-      if (req.method == 'GET') return res.view('auth/reset', {layout: 'rawLayout', context: {}});
+      if (req.method == 'GET') return res.view('resetPassword');
 
       // check if the confirm password is the same than password, and return an error if this is the case
       if (req.body.password != req.body.confirm) {
-        return res.view('auth/reset', {
-          layout: 'rawLayout',
-          context: {
-            error: {
-              message: 'bad password confirmation',
-              type: 'danger',
-              code: 1
-            }
-          }
-        });
+        return res.view('resetPassword');
       }
 
-      Passport.update(passport.id, {password: req.body.password, resetPasswordToken: undefined, resetPasswordExpires: undefined}).exec(function (err, updatedPassports) {
+      Credential.update(credential.id, {password: req.body.password, resetPasswordToken: undefined, resetPasswordExpires: undefined}).exec(function (err, updated) {
         if (err) return res.negotiate(err);
-        if (!updatedPassports[0]) return res.notFound();
+        if (!updated[0]) return res.notFound();
 
-        // TODO : login the user using the new modified passport
+				req.session.authenticated = true;
+
         userEmails.resetedPassword(updatedPassports[0].user);
-        return res.view('auth/reset', {
-          layout: 'rawLayout',
+
+				var emailOptions = {
+					to: credential.email,
+					subject: 'Password reseted',
+					html: "Your password has been changed successfully"
+				}
+				email.send(emailOptions);
+
+        return res.view('resetPassword', {
           context: {
             success: true
           }

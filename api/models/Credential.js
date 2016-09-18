@@ -6,6 +6,7 @@
  */
 
 var bcrypt = require('bcrypt');
+var uuid = require('node-uuid');
 
  /**
   * Hash a passport password.
@@ -13,10 +14,10 @@ var bcrypt = require('bcrypt');
   * @param {Object}   password
   * @param {Function} next
   */
-function hashPassword (password, next) {
+function hashPassword (password, cb) {
   bcrypt.hash(password, 10, function (err, hash) {
     var encryptedPassword = hash;
-    next(err, encryptedPassword);
+    return cb(err, encryptedPassword);
   });
 }
 
@@ -59,23 +60,32 @@ module.exports = {
   },
 
   /**
-   * Callback to be run before creating a Passport.
+   * Callback to be run before creating a Credential.
    *
-   * @param {Object}   passport The soon-to-be-created Passport
+   * @param {Object}   credential The soon-to-be-created credential
    * @param {Function} next
    */
-  beforeCreate: function (passport, next) {
-    hashPassword(passport, next);
+  beforeCreate: function (credential, next) {
+    credential.accessToken = uuid.v4();
+
+    hashPassword(credential.password, function(err, encryptedPassword) {
+      credential.password = encryptedPassword;
+
+      return next(err, credential)
+    });
   },
 
   /**
-   * Callback to be run before updating a Passport.
+   * Callback to be run before updating a Credential.
    *
-   * @param {Object}   passport Values to be updated
+   * @param {Object}   credential Values to be updated
    * @param {Function} next
    */
-  beforeUpdate: function (passport, next) {
-    hashPassword(passport, next);
+  beforeUpdate: function (credential, next) {
+    hashPassword(credential.password, function(err, encryptedPassword) {
+      credential.password = encryptedPassword;
+      return next(err, credential)
+    });
   }
-  
+
 };
