@@ -1,14 +1,17 @@
-var nodemailer = require("nodemailer");
-var sesTransport = require('nodemailer-ses-transport');
+/**
+ *  email service
+ *  Contain configuration and functions usable in controllers
+ */
 
 
 //
 // ### Scaffholding instructions ###
-// 1 - Set the api keys of the email service provider - line 14-16
-// 2 - Set the email adress of the default sender - line 44
+// 1 - Set the api keys of the email service provider - line 17-19
+// 2 - Set the email adress of the default sender - line 46
 //
 
-
+var nodemailer = require("nodemailer");
+var sesTransport = require('nodemailer-ses-transport');
 
 var transporter = nodemailer.createTransport(sesTransport({
   accessKeyId: "",
@@ -16,7 +19,6 @@ var transporter = nodemailer.createTransport(sesTransport({
   region: 'eu-west-1',
   rateLimit: 5 // do not send more than 5 messages in a second
 }));
-
 
 
 module.exports = {
