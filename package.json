@@ -23,6 +23,7 @@
     "node-uuid": "^1.4.7",
     "nodemailer": "^2.6.0",
     "nodemailer-ses-transport": "^1.4.0",
+    "pug": "^2.0.0-beta6",
     "rc": "1.0.1",
     "sails": "~0.12.4",
     "sails-disk": "~0.10.9",
