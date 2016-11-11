@@ -130,7 +130,7 @@ module.exports = {
 				var emailOptions = {
 					to: email,
 					subject: 'Reset password',
-					html: "<a href='" + sails.config.appUrl + '/auth/reset/' + token, + "'>Click here to reset your password</a>"
+					html: "<a href='" + sails.config.appUrl + '/auth/reset/' + token + "'>Click here to reset your password</a>"
 				}
 				email.send(emailOptions);
 
